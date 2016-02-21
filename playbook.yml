@@ -1,0 +1,78 @@
+---
+- hosts: all
+  user: root
+  sudo: yes
+  vars:
+    mysql_wp_password:
+    mysql_root_password:
+  tasks:
+    - name: install 
+      yum: name={{ item }} state=installed
+      with_items:
+        - mariadb-server
+        - php-mysql
+        - php
+        - php-gd
+        - php-mbstring
+        - mariadb
+        - httpd
+        - MySQL-python
+
+    - name: service
+      service: name={{ item }} state=started enabled=yes
+      with_items:
+        - mariadb
+        - httpd
+
+    - name: firewalld
+      firewalld: zone=public service={{ item }} state=enabled permanent=true immediate=yes
+      with_items:
+        - http
+        - https
+
+    - name: download wordpress 
+      get_url: url=https://ja.wordpress.org/wordpress-4.4.2-ja.tar.gz dest=/var/www/html/ mode=0440
+
+    - name: tar.gz unzip
+      command: chdir=/var/www/html/ tar xvzf wordpress-4.4.2-ja.tar.gz
+
+    - name: データベース wordpress を作成
+      mysql_db:
+        name: wordpress
+        state: present
+
+    - name: MySQLユーザー wordpress を作成し，wordpress.* にすべての権限を与える
+      mysql_user:
+        name: wordpress
+        password: "{{ mysql_wp_password }}"
+        priv: "wordpress.*:ALL"
+        host: localhost
+        state: present
+
+    - name: root アカウントのパスワードを設定
+      mysql_user:
+        name: root
+        host: localhost
+        password: "{{ mysql_root_password }}"
+
+
+    - name: wp-config.phpのコピー
+      command: cp /var/www/html/wordpress/wp-config-sample.php /var/www/html/wordpress/wp-config.php
+
+    - name: 設定ファイルの修正
+      replace: >-
+        dest='/var/www/html/wordpress/wp-config.php'
+        regexp='database_name_here'
+        replace='wordpress'
+
+    - name: 設定ファイルの修正
+      replace: >-
+        dest='/var/www/html/wordpress/wp-config.php'
+        regexp='username_here'
+        replace='wordpress'
+
+    - name: 設定ファイルの修正
+      replace: >-
+        dest='/var/www/html/wordpress/wp-config.php'
+        regexp='password_here'
+        replace="{{ mysql_wp_password }}"
